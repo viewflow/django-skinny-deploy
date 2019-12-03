@@ -1,0 +1,337 @@
+- hosts: all
+  gather_facts: false
+  become: true
+  environment:
+    LANG: "en_US.UTF-8"
+    LC_ALL: "en_US.UTF-8"
+  vars:
+    ansible_python_interpreter: "/usr/bin/env python3"
+    domain_name: "{{ ansible_host }}"
+    project_name: "{{ domain_name | replace('.','-') }}"
+    env_conf: |
+      DATABASE_URL=postgres:///{{ project_name }}
+    nginx_conf: |
+      server {
+        listen      80;
+        listen   [::]:80;
+        server_name {{ domain_name }};
+        return 301 https://$host$request_uri;
+      }
+
+      server {
+        listen      443 ssl http2;
+        listen [::]:443 ssl http2;
+        server_name {{ domain_name }};
+
+        ssl on;
+        ssl_certificate         /etc/letsencrypt/live/{{ domain_name }}/fullchain.pem;
+        ssl_certificate_key     /etc/letsencrypt/live/{{ domain_name }}/privkey.pem;
+        ssl_trusted_certificate /etc/letsencrypt/live/{{ domain_name }}/fullchain.pem;
+
+        ssl_session_cache shared:SSL:50m;
+        ssl_session_timeout 1h;
+        ssl_stapling on;
+        ssl_stapling_verify on;
+
+        ssl_protocols TLSv1 TLSv1.1 TLSv1.2;
+        ssl_ciphers "ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-SHA256:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA256:DHE-RSA-AES128-SHA256:DHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA:ECDHE-RSA-DES-CBC3-SHA:EDH-RSA-DES-CBC3-SHA:AES256-GCM-SHA384:AES128-GCM-SHA256:AES256-SHA256:AES128-SHA256:AES256-SHA:AES128-SHA:DES-CBC3-SHA:HIGH:!aNULL:!eNULL:!EXPORT:!DES:!MD5:!PSK:!RC4";
+
+        ssl_dhparam /etc/nginx/dhparams.pem;
+        ssl_prefer_server_ciphers on;
+
+        location / {
+          rewrite ^/robots\.txt$ /static/robots.txt last;
+          include proxy_params;
+          proxy_pass http://unix:/run/gunicorn-{{ project_name }}.sock;
+        }
+
+        location /static/ {
+          alias /srv/{{ domain_name }}/static/;
+        }
+
+        location /media/ {
+          alias /srv/{{ domain_name }}/media/;
+        }
+      }
+    gunicorn_service: |
+      [Unit]
+      Description=gunicorn daemon
+      Requires=gunicorn-{{ project_name }}.socket
+      After=network.target
+      [Service]
+      Type=notify
+      User={{ project_name }}
+      Group=www-data
+      RuntimeDirectory=gunicorn
+      WorkingDirectory=/srv/{{ domain_name }}
+      ExecStart=/srv/{{ domain_name }}/.venv/bin/gunicorn --workers={{ processor_count.stdout|int + 1 }} {{ wsgi_file_dir.stdout }}.wsgi:application
+      ExecReload=/bin/kill -s HUP $MAINPID
+      KillMode=mixed
+      TimeoutStopSec=5
+      PrivateTmp=true
+      [Install]
+      WantedBy=multi-user.target
+    gunicorn_socket: |
+      [Unit]
+      Description=gunicorn socket
+      [Socket]
+      ListenStream=/run/gunicorn-{{ project_name }}.sock
+      User={{ project_name }}
+      [Install]
+      WantedBy=sockets.target
+    certbot_service_conf: |
+      [Unit]
+      Description=Certbot Renewal
+      [Service]
+      ExecStart=/usr/bin/certbot renew --post-hook "systemctl restart nginx"
+    certbot_timer_conf: |
+      [Unit]
+      Description=Timer for Certbot Renewal
+      [Timer]
+      OnBootSec=300
+      OnUnitActiveSec=1w
+      [Install]
+      WantedBy=multi-user.target
+
+  handlers:
+    - name: restart gunicorn
+      systemd:
+        state: restarted
+        daemon_reload: yes
+        name: gunicorn-{{ project_name }}
+    - name: restart nginx
+      service: name=nginx state=restarted
+
+  tasks:
+    - name: Check https key on the host
+      stat: path=/etc/letsencrypt/live/{{ domain_name }}/privkey.pem
+      register: https_key_file
+
+    - pause:
+        prompt: "Email for  Let's Encrypt certificate?"
+      register: email_prompt
+      when: email is not defined and
+            https_key_file.stat.exists == False
+
+    - set_fact:
+        email: "{{email_prompt.user_input}}"
+      when: email_prompt.user_input is defined
+        
+    - set_fact:
+        user_name: "{{ project_name }}"  # to be available for become_user
+      tags: update
+
+    - shell: cat /proc/cpuinfo | grep processor | wc -l
+      register: processor_count
+
+    - name: Install system wide dependencies
+      apt:
+        state: present
+        cache_valid_time: 10800
+        update_cache: yes
+        pkg:
+          - rsync
+          - postgresql
+          - nginx
+          - certbot
+          - python3-psycopg2   # Required by ansible to create pg db/user.
+          - python3-setuptools # Required by ansible to use pip.
+          - python3-pip        # Actual pip for ansible.
+          - python3.7-dev      # Setup the python dev package you need.
+
+    - name: Install pipenv
+      pip:
+        name: pipenv
+        executable: pip3
+
+    - name: create system user
+      user:
+        name: "{{ user_name }}"
+        group: www-data
+        shell: /bin/false
+
+    - name: Synchronize source code
+      synchronize:
+        src: ../
+        dest: /srv/{{ domain_name }}/
+        delete: true
+        use_ssh_args: true
+        rsync_opts:
+          - "--filter=- .*"
+          - "--filter=- *.pyc"
+          - "--filter=- *.sqlite3"
+          - "--filter=- static/"
+          - "--filter=- media/"
+      register: source
+      tags: update
+      notify:
+        - restart gunicorn
+
+    - name: Check secret key on the host
+      stat: path=/srv/{{ domain_name }}/.ansible_secret_key
+      register: secret_key_file
+
+    - name: Create secret key
+      copy:
+        content: "{{ lookup('password','/dev/null length=50') }}"
+        dest: "/srv/{{ domain_name }}/.ansible_secret_key"
+      when: secret_key_file.stat.exists == False
+
+    - name: Read secret key
+      command: cat "/srv/{{ domain_name }}/.ansible_secret_key"
+      register: secret_key
+
+    - name: Create .env file
+      copy:
+        content: |
+          {{ env_conf }}
+          DOMAIN_NAME={{ domain_name }}
+          SECRET_KEY={{ secret_key.stdout }}
+        dest: "/srv/{{ domain_name }}/.env"
+
+    - name: Pipenv install
+      shell: "PIPENV_VENV_IN_PROJECT=1 pipenv install --deploy"
+      args:
+        chdir: /srv/{{ domain_name }}/
+      tags: update
+      when: source.changed
+
+    - name: Django - collect static files
+      shell: "pipenv run ./manage.py collectstatic --noinput"
+      args:
+        chdir: /srv/{{ domain_name }}/
+      tags: update
+      when: source.changed
+
+    - name: Create PostreSQL User
+      become_user: postgres
+      postgresql_user: name="{{ project_name }}"
+
+    - name: Create PostgreSQL Database
+      become_user: postgres
+      postgresql_db: name="{{ project_name }}" owner="{{ project_name }}"
+
+    - name: Django - run migration
+      become_user: "{{ user_name }}"
+      shell: "pipenv run python ./manage.py migrate --noinput"
+      args:
+        chdir: /srv/{{ domain_name }}/
+      tags: update
+      when: source.changed
+
+    - name: Create media dir
+      file: state=directory
+        path=/srv/{{ domain_name }}/media/
+        owner="{{ project_name }}"
+        group="www-data"
+        mode=0755
+
+    - name: Create letsencrypt acme files dir
+      file: state=directory
+        path=/srv/{{ domain_name }}/.letsencrypt
+        owner="root"
+        group="root"
+        mode=0755
+      when: https_key_file.stat.exists == False
+
+    - name: setup nginx for acme challenge
+      copy:
+        content: |
+          server {
+              listen      80;
+              listen   [::]:80;
+              server_name {{ domain_name }};
+
+              location /.well-known/acme-challenge {
+                  root /srv/{{ domain_name }}/.letsencrypt;
+                  try_files $uri $uri/ =404;
+              }
+          }
+        dest: /etc/nginx/sites-available/{{ project_name }}.conf
+      when: https_key_file.stat.exists == False
+
+    - name: Enable site nginx config
+      file: state=link
+        src=/etc/nginx/sites-available/{{ project_name }}.conf
+        dest=/etc/nginx/sites-enabled/{{ project_name }}.conf
+      notify:
+        - restart nginx
+
+    - name: restart nginx for acme challenge
+      service: name=nginx state=restarted
+      when: https_key_file.stat.exists == False
+
+    - name: Create letsencrypt certificate
+      shell: letsencrypt certonly -n --webroot -w /srv/{{ domain_name }}/.letsencrypt --agree-tos -d {{ domain_name }} --email={{ email }}
+      args:
+        creates: /etc/letsencrypt/live/{{ domain_name }}
+      retries: 3
+      delay: 5
+      register: letsencrypt_result
+      when: https_key_file.stat.exists == False
+      until: letsencrypt_result is succeeded
+
+    - name: Generate nginx dhparams
+      shell: openssl dhparam -out /etc/nginx/dhparams.pem 2048
+      args:
+        creates: /etc/nginx/dhparams.pem
+
+    - name: Set no response in the default nginx config
+      copy:
+        content: |
+          server {
+            listen 80 default_server;
+            return 444;
+          }
+        dest: /etc/nginx/sites-available/default
+      notify:
+        - restart nginx
+
+    - name: Create website nginx config
+      copy:
+        content: "{{ nginx_conf }}"
+        dest: /etc/nginx/sites-available/{{ project_name }}.conf
+      notify:
+        - restart nginx
+
+    - name: Install gunicorn
+      shell: "pipenv run pip install gunicorn"
+      args:
+        chdir: /srv/{{ domain_name }}/
+        creates: /srv/{{ domain_name }}/.venv/bin/gunicorn
+
+    - name: Find wsgi file
+      shell: "dirname */wsgi.py"
+      args:
+        chdir: /srv/{{ domain_name }}/
+      register: wsgi_file_dir
+
+    - name: Setup gunicorn service
+      copy:
+        content: "{{ gunicorn_service }}"
+        dest: /etc/systemd/system/gunicorn-{{ project_name }}.service
+      notify:
+        - restart gunicorn
+
+    - name: Setup gunicorn socket
+      copy:
+        content: "{{ gunicorn_socket }}"
+        dest: /etc/systemd/system/gunicorn-{{ project_name }}.socket
+      notify:
+        - restart gunicorn
+
+    - name: Setup certbot renewal service
+      copy:
+        content: "{{ certbot_service_conf }}"
+        dest: /etc/systemd/system/certbot-renewal.service
+
+    - name: Setup certbot renewal timer
+      copy:
+        content: "{{ certbot_timer_conf }}"
+        dest: /etc/systemd/system/certbot-renewal.timer
+
+    - name: Enable certbot timer
+      systemd:
+        name: certbot-renewal.timer
+        state: started
+        enabled: yes
