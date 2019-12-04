@@ -13,9 +13,9 @@ images
     <a href="http://docs.gunicorn.org"><img src="http://docs.gunicorn.org/en/latest/_images/gunicorn.png" height="50px"></a>&nbsp;&nbsp;&nbsp;&nbsp;
     <a href="https://nginx.org"><img src="https://nginx.org/nginx.png" height="50px"></a>&nbsp;&nbsp;&nbsp;&nbsp;
 
- https://medium.com/p/afde190f9e80/
+`Read full story on Medium <https://medium.com/@viewflow/single-file-deploy-django-to-a-generic-ubuntu-host-afde190f9e80?sk=5851cc2ad08c6d9f58279e2462084fd3
+>`_
 
-    
 Why?
 ====
 
@@ -58,7 +58,7 @@ enabled. No extra heady sugar added.
 
 For an existing project, you need to install pipenv, and modify
 project settings to use django-environ.  Detailed instructions
-available in the article - https://medium.com/p/afde190f9e80/
+available in the `article <https://medium.com/@viewflow/single-file-deploy-django-to-a-generic-ubuntu-host-afde190f9e80?sk=5851cc2ad08c6d9f58279e2462084fd3>`_
 
 Deploy
 ======
