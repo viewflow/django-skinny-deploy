@@ -26,8 +26,12 @@ Prerequisites
 
 - Get your Virtual Private Server running (Digital Ocean, Linode, Vultr or on any other provider)
 - Buy and set up your domain (GoDaddy, Gandi, ...)
-- Pipenv tool installed on your machine
-- django-environ enabled settings for the django project
+
+Ensure that your server is up and running and you can conntect to them over ssh over domain name
+
+.. code:: bash
+
+     ssh root@yourdomain.com
 
 Would would happen next?
 ========================
@@ -59,17 +63,27 @@ available in the article - https://medium.com/p/afde190f9e80/
 Deploy
 ======
 
+To work on the proeject you need to have Pipenv and Ansible tools
+installed. I prefer to have pipenv installed for a user, and ansible
+as a development project dependency
+
 .. code:: bash
 
+    python3 -m pip install --user pipenv
     pipenv -d install ansible
 
 .. code:: bash
 
-     pipenv run ansible-playbook -i yourdomain.com, -u root deploy.yml
+     pipenv run ansible-playbook -i yourdomain.com, -u root deploy.yml 
 
-Please note the command after the domain name. It's required and tell
+Please note the comma after the domain name. It's required and tell
 ansible that we have provided a domain name, instead of an inventory
 file name.
+
+During the first deployment you would be asked for an email address
+for Let's Encrypt certificate registration.
+
+That's all!
 
 Update existing deployment
 ==========================
@@ -88,7 +102,7 @@ Check service status on the server consile:
 .. code:: bash
 
     $ service nginx status
-    $ service gunicorn_mysite_com status
+    $ service gunicorn_yourdomain_com status
 
 Check logs at:
 
