@@ -18,7 +18,7 @@ Read full story on `Medium <https://medium.com/@viewflow/single-file-deploy-djan
 Why?
 ====
 
-Because I didn't find any drop-and-run solution without overburden with a lot of files for a simple project.
+Because I didn't find any drop-and-run solution not overburden with a lot of files for a simple project.
 
 Prerequisites
 =============
