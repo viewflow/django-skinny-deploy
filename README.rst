@@ -117,7 +117,7 @@ Have an idea how to make this script smarter, smaller and cleaner? Pull requests
 
 License
 =======
-Zero Clause BSD
+Zero-Clause BSD (0BSD)
 
 Copyright (C) 2019 by Mikhail Podgurskiy <kmmbvnr@gmail.com>
 
