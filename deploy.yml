@@ -79,19 +79,9 @@
       User={{ project_name }}
       [Install]
       WantedBy=sockets.target
-    certbot_service_conf: |
-      [Unit]
-      Description=Certbot Renewal
-      [Service]
-      ExecStart=/usr/bin/certbot renew --post-hook "systemctl restart nginx"
-    certbot_timer_conf: |
-      [Unit]
-      Description=Timer for Certbot Renewal
-      [Timer]
-      OnBootSec=300
-      OnUnitActiveSec=1w
-      [Install]
-      WantedBy=multi-user.target
+    certbot_post_hook: |
+      #!/bin/sh
+      systemctl reload nginx
 
   handlers:
     - name: restart gunicorn
@@ -120,6 +110,7 @@
     - set_fact:
         user_name: "{{ project_name }}"  # to be available for become_user
       tags: update
+
 
     - shell: cat /proc/cpuinfo | grep processor | wc -l
       register: processor_count
@@ -320,18 +311,8 @@
       notify:
         - restart gunicorn
 
-    - name: Setup certbot renewal service
+    - name: Setup certbot post-hook
       copy:
-        content: "{{ certbot_service_conf }}"
-        dest: /etc/systemd/system/certbot-renewal.service
-
-    - name: Setup certbot renewal timer
-      copy:
-        content: "{{ certbot_timer_conf }}"
-        dest: /etc/systemd/system/certbot-renewal.timer
-
-    - name: Enable certbot timer
-      systemd:
-        name: certbot-renewal.timer
-        state: started
-        enabled: yes
+        content: "{{ certbot_post_hook }}"
+        dest:  /etc/letsencrypt/renewal-hooks/post/reload-nginx.sh
+        mode: 750
