@@ -18,7 +18,7 @@ Read full story on `Medium <https://medium.com/@viewflow/single-file-deploy-djan
 Why?
 ====
 
-Because I didn't find any drop-and-run solution without overburden with a lot of files for a simple project.
+Because I didn't find any drop-and-run solution not overburdened with a lot of files for a simple project.
 
 Prerequisites
 =============
@@ -26,27 +26,27 @@ Prerequisites
 - Get your Virtual Private Server running (Digital Ocean, Linode, Vultr or on any other provider)
 - Buy and set up your domain (GoDaddy, Gandi, ...)
 
-Ensure that your server is up and running and you can conntect to them over ssh over domain name
+Ensure that your server is up and running and you can connect to them over ssh via domain name
 
 .. code:: bash
 
      ssh root@yourdomain.com
 
-Would would happen next?
+What does this script do?
 ========================
 
 - Postgresql/Nginx/Gunicorn installed and configured on the server
 - All code from a local directory synced to /srv/yourdomain.com on the server
-- yourdomain-com user and youdomain-com database would be created on the Postgresql
-- Let's encrypt certificates requested, systemd timer installed for automatic renewal
+- yourdomain-com user and yourdomain-com database created on the Postgresql server
+- Let's Encrypt certificates requested, systemd timer installed for automatic renewal
 
-https://yourdomain.com - became ready to serve for you.
+https://yourdomain.com - becomes ready to serve.
 
   
-Quick start
+Quick Start
 ===========
 
-The repository contains quick django project template. It's just raw
+The repository contains a quick django project template. It's just a raw
 django 3.0 startproject template with Pipenv and django-environ
 enabled. No extra heady sugar added.
 
@@ -57,14 +57,14 @@ enabled. No extra heady sugar added.
 
 For an existing project, you need to install pipenv, and modify
 project settings to use django-environ.  Detailed instructions
-available in the `article <https://medium.com/@viewflow/single-file-deploy-django-to-a-generic-ubuntu-host-afde190f9e80?sk=5851cc2ad08c6d9f58279e2462084fd3>`_
+available in this `article. <https://medium.com/@viewflow/single-file-deploy-django-to-a-generic-ubuntu-host-afde190f9e80?sk=5851cc2ad08c6d9f58279e2462084fd3>`_
 
 Deploy
 ======
 
 To work on the proeject you need to have Pipenv and Ansible tools
 installed. I prefer to have pipenv installed for a user, and ansible
-as a development project dependency
+as a development project dependency.
 
 .. code:: bash
 
@@ -75,11 +75,11 @@ as a development project dependency
 
      pipenv run ansible-playbook -i yourdomain.com, -u root deploy.yml 
 
-Please note the comma after the domain name. It's required and tell
+Please note the comma after the domain name. It's required and tells
 ansible that we have provided a domain name, instead of an inventory
 file name.
 
-During the first deployment you would be asked for an email address
+During the first deployment you will be asked for an email address
 for Let's Encrypt certificate registration.
 
 That's all!
@@ -91,12 +91,12 @@ Update existing deployment
 
     pipenv run ansible-playbook -i yourdomain.com, -u root deploy.yml -tags=update
 
-Trobleshooting
+Troubleshooting
 ==============
 
 Run ansible-playbook with -vvv flag:
 
-Check service status on the server consile:
+Check service status on the server console:
 
 .. code:: bash
 
@@ -117,7 +117,7 @@ Have an idea how to make this script smarter, smaller and cleaner? Pull requests
 
 License
 =======
-Zero Clause BSD
+Zero-Clause BSD (0BSD)
 
 Copyright (C) 2019 by Mikhail Podgurskiy <kmmbvnr@gmail.com>
 
